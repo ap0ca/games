@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Minesweeper</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name="description" content="A simple minesweeper game."/>
+    <meta name="author" content="ap0c"/>
+    <style>
+        :root {
+            --size: 2rem;
+            --mine: "💣";
+            --exploded: "💥";
+            --flagged: "🚩";
+            --color-close: gray;
+            --color-open: silver;
+            --color-border: black;
+            --color-1: dodgerblue;
+            --color-2: green;
+            --color-3: red;
+            --color-4: navy;
+            --color-5: maroon;
+            --color-6: teal;
+            --color-7: black;
+            --color-8: gray;
+        }
+
+        div {
+            margin: 0;
+            padding: 0;
+            line-height: 0;
+        }
+
+        button {
+            margin-top: calc(var(--size) / 4);
+            margin-right: calc(var(--size) / 4);
+        }
+
+        .ms-game {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .ms-cell {
+            width: var(--size);
+            height: var(--size);
+            background-color: var(--color-close);
+            border: calc((var(--size) / 20)) solid var(--color-border);
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .ms-cell-open {
+            background-color: var(--color-open);
+        }
+
+        .ms-cell:after {
+            position: absolute;
+            line-height: var(--size);
+            font-size: calc(var(--size) / 1.5);
+            text-align: center;
+            width: var(--size);
+            font-weight: bold;
+        }
+
+        .ms-cell.ms-cell-open:after {
+            content: attr(data-number);
+        }
+
+        .ms-cell[data-number="1"] {
+            color: var(--color-1);
+        }
+
+        .ms-cell[data-number="2"] {
+            color: var(--color-2);
+        }
+
+        .ms-cell[data-number="3"] {
+            color: var(--color-3);
+        }
+
+        .ms-cell[data-number="4"] {
+            color: var(--color-4);
+        }
+
+        .ms-cell[data-number="5"] {
+            color: var(--color-5);
+        }
+
+        .ms-cell[data-number="6"] {
+            color: var(--color-6);
+        }
+
+        .ms-cell[data-number="7"] {
+            color: var(--color-7);
+        }
+
+        .ms-cell[data-number="8"] {
+            color: var(--color-8);
+        }
+
+        .ms-cell:after {
+            position: absolute;
+            line-height: var(--size);
+            font-size: calc(var(--size) / 1.5);
+            text-align: center;
+            width: var(--size);
+            font-weight: bold;
+        }
+
+        .ms-cell-mine:after {
+            content: var(--mine);
+        }
+
+        .ms-cell-flagged:after {
+            content: var(--flagged);
+        }
+
+        .ms-cell-exploded:after {
+            content: var(--exploded);
+        }
+    </style>
+</head>
+<body>
+<div id="game"></div>
+<script>
+    function Minesweeper(options) {
+        this.levels = {
+            easy: {
+                cols: 8,
+                rows: 8,
+                mines: 10,
+            },
+            medium: {
+                cols: 16,
+                rows: 16,
+                mines: 40,
+            },
+            hard: {
+                cols: 31,
+                rows: 16,
+                mines: 99,
+            },
+        };
+
+        this.options = {
+            ...{
+                el: document.getElementsByTagName('body')[0],
+                cols: this.levels.easy.cols,
+                rows: this.levels.easy.rows,
+                mines: this.levels.easy.mines,
+                level: 'easy',
+                cellClass: 'ms-cell',
+                cellOpenClass: 'ms-cell-open',
+                cellMineClass: 'ms-cell-mine',
+                cellExplodedClass: 'ms-cell-exploded',
+                cellFlaggedClass: 'ms-cell-flagged',
+                rowClass: 'ms-row',
+                gameClass: 'ms-game',
+            },
+            ...options,
+        };
+
+        this.setup();
+    }
+
+    Minesweeper.prototype.setup = function () {
+        this.elWrapper = document.createElement('div');
+        this.elWrapper.classList.add('ms-game');
+        this.options.el.append(this.elWrapper);
+
+        this.elEasy = document.createElement('button');
+        this.elEasy.innerText = 'Easy';
+        this.options.el.append(this.elEasy);
+
+        this.elMedium = document.createElement('button');
+        this.elMedium.innerText = 'Medium';
+        this.options.el.append(this.elMedium);
+
+        this.elHard = document.createElement('button');
+        this.elHard.innerText = 'Hard';
+        this.options.el.append(this.elHard);
+
+        this.reset();
+
+        this.removeEventListeners();
+        this.addEventListeners();
+    };
+
+    Minesweeper.prototype.reset = function () {
+        if (Object.keys(this.levels).includes(this.options.level)) {
+            this.options.cols = this.levels[this.options.level].cols;
+            this.options.rows = this.levels[this.options.level].rows;
+            this.options.mines = this.levels[this.options.level].mines;
+        }
+
+        this.cellsOpened = 0;
+        this.gameOver = false;
+        this.cells = [];
+
+        while (this.elWrapper.firstChild) {
+            this.elWrapper.removeChild(this.elWrapper.lastChild);
+        }
+
+        for (let y = 0; y < this.options.rows; y++) {
+            const elRow = document.createElement('div');
+
+            for (let x = 0; x < this.options.cols; x++) {
+                const elCell = document.createElement('div');
+                elCell.classList.add(this.options.cellClass);
+                elRow.append(elCell);
+
+                this.cells.push({
+                    x: x,
+                    y: y,
+                    el: elCell,
+                    index: y * this.options.cols + x,
+                    mine: false,
+                    open: false,
+                    flag: false,
+                    number: null,
+                });
+            }
+
+            elRow.classList.add(this.options.rowClass);
+            this.elWrapper.append(elRow);
+        }
+    };
+
+    Minesweeper.prototype.addEventListeners = function () {
+        this.onCellClick = this.onCellClick.bind(this);
+        this.onCellRightClick = this.onCellRightClick.bind(this);
+
+        this.onEasyClick = this.onEasyClick.bind(this);
+        this.onMediumClick = this.onMediumClick.bind(this);
+        this.onHardClick = this.onHardClick.bind(this);
+
+        this.elWrapper.addEventListener('click', this.onCellClick, true);
+        this.elWrapper.addEventListener('contextmenu', this.onCellRightClick, true);
+        this.elEasy.addEventListener('click', this.onEasyClick, true);
+        this.elMedium.addEventListener('click', this.onMediumClick, true);
+        this.elHard.addEventListener('click', this.onHardClick, true);
+    };
+
+    Minesweeper.prototype.removeEventListeners = function () {
+        this.elWrapper.removeEventListener('click', this.onCellClick, true);
+        this.elWrapper.addEventListener('contextmenu', this.onCellRightClick, true);
+        this.elEasy.removeEventListener('click', this.onEasyClick, true);
+        this.elMedium.removeEventListener('click', this.onMediumClick, true);
+        this.elHard.removeEventListener('click', this.onHardClick, true);
+    };
+
+    Minesweeper.prototype.onEasyClick = function (e) {
+        e.preventDefault();
+        this.options.level = 'easy';
+        this.reset();
+    };
+
+    Minesweeper.prototype.onMediumClick = function (e) {
+        e.preventDefault();
+        this.options.level = 'medium';
+        this.reset();
+    };
+
+    Minesweeper.prototype.onHardClick = function (e) {
+        e.preventDefault();
+        this.options.level = 'hard';
+        this.reset();
+    };
+
+    Minesweeper.prototype.onCellClick = function (e) {
+        e.preventDefault();
+
+        this.options && e.target.classList.contains(this.options.cellClass)
+        && this.cellClick(this.cells.find(cell => cell.el === e.target));
+    };
+
+    Minesweeper.prototype.onCellRightClick = function (e) {
+        e.preventDefault();
+
+        this.options && e.target.classList.contains(this.options.cellClass)
+        && this.cellRightClick(this.cells.find(cell => cell.el === e.target));
+    };
+
+    Minesweeper.prototype.cellClick = function (cell) {
+        if (this.gameOver || cell.flag) {
+            return;
+        }
+
+        if (!this.cellsOpened) {
+            this.generate(cell.y * this.options.cols + cell.x);
+        }
+
+        this.open(cell);
+    };
+
+    Minesweeper.prototype.cellRightClick = function (cell) {
+        if (this.gameOver) {
+            return;
+        }
+
+        cell.flag = !cell.flag;
+
+        if (cell.flag) {
+            cell.el.classList.add(this.options.cellFlaggedClass);
+        } else {
+            cell.el.classList.remove(this.options.cellFlaggedClass);
+        }
+    };
+
+    Minesweeper.prototype.open = function (cell) {
+        if (cell.mine) {
+            this.cells.forEach(_cell => {
+                if (_cell === cell) {
+                    _cell.el.classList.add(this.options.cellExplodedClass);
+                } else if (_cell.mine) {
+                    _cell.el.classList.add(this.options.cellMineClass);
+                }
+            });
+
+            this.cellsOpened++;
+            this.gameOver = true;
+            return;
+        }
+
+        if (!cell.mine && !cell.open) {
+            cell.el.classList.add(this.options.cellOpenClass);
+            cell.open = true;
+            this.cellsOpened++;
+
+            if (cell.number === null) {
+                this.forEachNeighbour(cell, nCell => {
+                    if (!nCell.open) {
+                        this.open(nCell);
+                    }
+                });
+            }
+        }
+
+        if (!this.gameOver && this.cellsOpened === this.options.rows * this.options.cols - this.options.mines) {
+            this.gameOver = true;
+            setTimeout(() => alert('WINNER!'), 0);
+        }
+    };
+
+    Minesweeper.prototype.generate = function (skipIndex) {
+        const mines = new Array(this.options.mines).fill(1);
+        const empty = new Array(this.options.rows * this.options.cols - this.options.mines - 1).fill(0);
+        const cells = [...mines, ...empty].sort(() => Math.random() - 0.5);
+        cells.splice(skipIndex, 0, 0);
+
+        this.cells.forEach(cell => {
+            if (cells[cell.index] === 1) {
+                this.cells[cell.index].mine = true;
+            }
+        });
+
+        this.cells.forEach(cell => {
+            if (!cell.mine) {
+                this.forEachNeighbour(cell, nCell => {
+                    if (nCell.mine) {
+                        cell.number++;
+                    }
+                });
+            }
+        });
+    };
+
+    Minesweeper.prototype.forEachNeighbour = function (cell, callback) {
+        const directions = [
+            cell.index - 1, // left
+            cell.index - 1 - this.options.cols, // top-left
+            cell.index - this.options.cols, // top
+            cell.index + 1 - this.options.cols, // top-right
+            cell.index + 1, // right
+            cell.index - 1 + this.options.cols, // bottom-left
+            cell.index + this.options.cols, // bottom
+            cell.index + 1 + this.options.cols, // bottom-right
+        ];
+
+        directions.forEach(direction => {
+            if (direction >= 0 && direction < this.cells.length
+                && !(direction === cell.index - 1 && cell.x === 0)
+                && !(direction === cell.index - 1 - this.options.cols && cell.x === 0)
+                && !(direction === cell.index - 1 + this.options.cols && cell.x === 0)
+                && !(direction === cell.index + 1 - this.options.cols && cell.x === this.options.cols - 1)
+                && !(direction === cell.index + 1 && cell.x === this.options.cols - 1)
+                && !(direction === cell.index + 1 + this.options.cols && cell.x === this.options.cols - 1)
+            ) {
+                callback(this.cells[direction]);
+            }
+        });
+
+        if (cell.number !== null) {
+            cell.el.dataset.number = cell.number;
+        }
+    };
+
+    new Minesweeper({
+        el: document.getElementById('game'),
+        // level: 'custom',
+        // cols: 30,
+        // rows: 15,
+        // mines: 250,
+    });
+</script>
+</body>
+</html>
