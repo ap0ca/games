@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tetris</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name="description" content="A simple minesweeper game."/>
+    <meta name="author" content="Ap0"/>
+    <style>
+        :root {
+            --color-0: #f5f5f5;
+            --color-1: #20c7c7; /* I */
+            --color-2: mediumblue; /* J */
+            --color-3: orange; /* L */
+            --color-4: yellow; /* O */
+            --color-5: lime; /* S */
+            --color-6: darkviolet; /* T */
+            --color-7: red; /* Z */
+            --blockSize: 2.6rem;
+            --cols: 10;
+            --rows: 20;
+        }
+
+        .tt-clip {
+            border: calc(var(--blockSize) / 10) solid black;
+            width: calc(var(--blockSize) * var(--cols));
+            height: calc(var(--blockSize) * var(--rows) - var(--blockSize));
+            display: flex;
+            justify-content: flex-end;
+            align-items: flex-end;
+            overflow: clip;
+        }
+
+        .tt-wrapper {
+            position: relative;
+            width: calc(var(--blockSize) * var(--cols));
+            height: calc(var(--blockSize) * var(--rows));
+            background-color: var(--color-0);
+        }
+
+        .tt-wrapper::after {
+            content: attr(data-rows);
+        }
+
+        .tt-piece {
+            width: var(--blockSize);
+            height: var(--blockSize);
+            position: absolute;
+        }
+
+        .tt-piece:not([data-number="0"]) {
+            border-radius: 0.2rem;
+            box-shadow: inset calc(var(--blockSize) / 10) calc(var(--blockSize) / 10) calc(var(--blockSize) / 10) 0 rgba(255, 255, 255, .5),
+            calc(var(--blockSize) / 10) calc(var(--blockSize) / 10) calc(var(--blockSize)) 0 rgba(0, 0, 0, .1),
+            calc(var(--blockSize) / 10) calc(var(--blockSize) / 10) calc(var(--blockSize) / 10) 0 rgba(0, 0, 0, .1);
+        }
+
+        .tt-piece[data-number="0"] {
+            background-color: var(--color-0);
+        }
+
+        .tt-piece[data-number="1"] {
+            background-color: var(--color-1);
+        }
+
+        .tt-piece[data-number="2"] {
+            background-color: var(--color-2);
+        }
+
+        .tt-piece[data-number="3"] {
+            background-color: var(--color-3);
+        }
+
+        .tt-piece[data-number="4"] {
+            background-color: var(--color-4);
+        }
+
+        .tt-piece[data-number="5"] {
+            background-color: var(--color-5);
+        }
+
+        .tt-piece[data-number="6"] {
+            background-color: var(--color-6);
+        }
+
+        .tt-piece[data-number="7"] {
+            background-color: var(--color-7);
+        }
+    </style>
+</head>
+<body>
+<div id="game"></div>
+<script>
+    function Tetris(options) {
+        this.options = {
+            ...{
+                el: document.getElementsByTagName('body')[0],
+                classPrefix: 'tt-',
+                classes: {
+                    wrapper: 'wrapper',
+                    clip: 'clip',
+                    piece: 'piece',
+                },
+                speed: 1000,
+                rows: 20,
+                cols: 10,
+                blockSize: 2.6,
+            },
+            ...options,
+        };
+
+        this.pieces = {
+            1: { // I
+                color: 1,
+                blocks: [
+                    [0, 0],
+                    [1, 0],
+                    [2, 0],
+                    [3, 0],
+                ],
+            },
+            2: { // J
+                color: 2,
+                blocks: [
+                    [0, 0],
+                    [0, 1],
+                    [1, 1],
+                    [2, 1],
+                ],
+            },
+            3: { // L
+                color: 3,
+                blocks: [
+                    [2, 0],
+                    [0, 1],
+                    [1, 1],
+                    [2, 1],
+                ],
+            },
+            4: { // O
+                color: 4,
+                blocks: [
+                    [0, 0],
+                    [1, 0],
+                    [0, 1],
+                    [1, 1],
+                ],
+            },
+            5: { // S
+                color: 5,
+                blocks: [
+                    [1, 0],
+                    [2, 0],
+                    [0, 1],
+                    [1, 1],
+                ],
+            },
+            6: { // T
+                color: 6,
+                blocks: [
+                    [1, 0],
+                    [0, 1],
+                    [1, 1],
+                    [2, 1],
+                ],
+            },
+            7: { // Z
+                color: 7,
+                blocks: [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                    [2, 1],
+                ],
+            },
+        };
+
+        this.setup();
+    }
+
+    Tetris.prototype.createElement = function (tag, options) {
+        const el = document.createElement(tag);
+
+        if (options?.hasOwnProperty('class')) {
+            el.classList.add(options.class);
+        }
+
+        if (options?.hasOwnProperty('style')) {
+            for (let key in options.style) {
+                el.style[key] = options.style[key];
+            }
+        }
+
+        return el;
+    };
+
+    Tetris.prototype.setup = function () {
+        this.elWrapper = this.createElement('div', {
+            class: this.options.classPrefix + this.options.classes.wrapper,
+        });
+
+        this.elClip = this.createElement('div', {
+            class: this.options.classPrefix + this.options.classes.clip,
+        });
+
+        this.options.el.appendChild(this.elClip);
+        this.elClip.appendChild(this.elWrapper);
+
+        this.blocks = this.createMap(this.options.rows, this.options.cols);
+        this.elements = this.createMap(this.options.rows, this.options.cols);
+        this.burnStart = 0;
+        this.burnCount = 0;
+
+        for (let y = 0; y < this.options.rows; y++) {
+            for (let x = 0; x < this.options.cols; x++) {
+                this.elements[y][x] = this.createElement('div', {
+                    class: this.options.classPrefix + this.options.classes.piece,
+                    style: {
+                        left: (x * this.options.blockSize) + 'rem',
+                        top: (y * this.options.blockSize) + 'rem',
+                    },
+                });
+
+                this.elements[y][x].dataset.number = '0';
+                this.elWrapper.appendChild(this.elements[y][x]);
+            }
+        }
+
+        this.removeListeners();
+        this.addListeners();
+
+        this.tick = this.tick.bind(this);
+        this.setInterval(this.options.speed);
+    };
+
+    Tetris.prototype.onKeyDown = function (e) {
+        switch (e.keyCode) {
+            case 37: // left
+                this.moveLeft();
+                break;
+            case 38: // up
+                this.rotate();
+                break;
+            case 39: // right
+                this.moveRight();
+                break;
+            case 40: // down
+                this.tick();
+                break;
+        }
+    }
+
+    Tetris.prototype.removeListeners = function () {
+        document.removeEventListener('keydown', this.onKeyDown, true);
+    };
+
+    Tetris.prototype.addListeners = function () {
+        this.onKeyDown = this.onKeyDown.bind(this);
+
+        document.addEventListener('keydown', this.onKeyDown, true);
+    };
+
+    Tetris.prototype.tick = function () {
+        if (!this.current || (this.current && !this.canMove(0, 1))) {
+            if (this.burn()) {
+                return;
+            }
+
+            if (this.fall()) {
+                return;
+            }
+
+            this.spawn();
+            this.redraw();
+            return;
+        }
+
+        this.moveDown();
+        this.redraw();
+    };
+
+    Tetris.prototype.createMap = function (rows, cols) {
+        const map = [];
+
+        for (let y = 0; y < rows; y++) {
+            map[y] = [];
+
+            for (let x = 0; x < cols; x++) {
+                map[y][x] = 0;
+            }
+        }
+
+        return map;
+    };
+
+    Tetris.prototype.setBlock = function (x, y, val) {
+        this.blocks[y][x] = val;
+    };
+
+    Tetris.prototype.getBlock = function (x, y) {
+        if (y > this.options.rows - 1 || x < 0 || y < 0 || x > this.options.cols - 1) {
+            return null;
+        }
+
+        return this.blocks[y][x];
+    };
+
+    Tetris.prototype.spawn = function () {
+        const random = Object.keys(this.pieces)[Object.keys(this.pieces).length * Math.random() << 0];
+
+        this.current = {
+            ...structuredClone(this.pieces[random]),
+            rotation: 0,
+        };
+
+        let maxBlocks = 1;
+        this.current.blocks.forEach(block => maxBlocks = Math.max(maxBlocks, block[0] + 1));
+
+        [...Array(Math.round(this.options.cols / 2 - maxBlocks / 2))].map(() => this.current.blocks.forEach(position => ++position[0]));
+
+        for (let key in this.current.blocks) {
+            if (this.getBlock(this.current.blocks[key][0], this.current.blocks[key][1])) {
+                clearInterval(this.interval);
+                this.current = null;
+                setTimeout(() => alert('GAME OVER'), 0);
+                return;
+            }
+        }
+
+        this.current.blocks.forEach(pos => {
+            this.setBlock(pos[0], pos[1], this.current.color);
+        });
+    };
+
+    Tetris.prototype.setInterval = function (speed) {
+        clearInterval(this.interval);
+        this.interval = setInterval(this.tick, speed);
+        this.options.speed = speed;
+    }
+
+    Tetris.prototype.move = function (dx, dy) {
+        if (!this.current || !this.canMove(dx, dy)) {
+            return;
+        }
+
+        this.current.blocks.forEach(block => {
+            this.setBlock(block[0], block[1], 0);
+        });
+
+        this.current.blocks.forEach((block, key) => {
+            this.setBlock(block[0] + dx, block[1] + dy, this.current.color);
+            this.current.blocks[key] = [block[0] + dx, block[1] + dy];
+        });
+
+        this.redraw();
+    };
+
+    Tetris.prototype.arrayContains = function (haystack, searchElement) {
+        for (let key in haystack) {
+            if (searchElement[0] === haystack[key][0] && searchElement[1] === haystack[key][1]) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    Tetris.prototype.canMove = function (dx, dy) {
+        for (let key in this.current.blocks) {
+            const block = this.current.blocks[key];
+            const targetBlock = this.getBlock(block[0] + dx, block[1] + dy);
+
+            if (targetBlock === null) {
+                return false;
+            } else if (targetBlock && !this.arrayContains(this.current.blocks, [block[0] + dx, block[1] + dy])) {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    Tetris.prototype.canRotate = function (positions) {
+        for (let key in positions) {
+            const targetBlock = this.getBlock(positions[key][0], positions[key][1]);
+
+            if (targetBlock === null) {
+                return false;
+            } else if (targetBlock && !this.arrayContains(this.current.blocks, positions[key])) {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    Tetris.prototype.getBlockFit = function (blocks) {
+        if (this.canRotate(blocks)) {
+            return blocks;
+        }
+
+        blocks.forEach(position => --position[0]);
+
+        if (this.canRotate(blocks)) {
+            return blocks;
+        }
+
+        blocks.forEach(position => ++position[0] & ++position[0]);
+
+        if (this.canRotate(blocks)) {
+            return blocks;
+        }
+
+        if (this.current.color === 1) {
+            if (this.current.rotation === 1) {
+                blocks.forEach(position => ++position[0]);
+
+                if (this.canRotate(blocks)) {
+                    return blocks;
+                }
+            } else if (this.current.rotation === 3) {
+                blocks.forEach(position => --position[0] & --position[0] & --position[0]);
+
+                if (this.canRotate(blocks)) {
+                    return blocks;
+                }
+            }
+        }
+
+        return null;
+    };
+
+    Tetris.prototype.rotateBlock = function (blocks, data) {
+        data.forEach(values => {
+            blocks[values[0]][0] += values[1];
+            blocks[values[0]][1] += values[2];
+        });
+    };
+
+    Tetris.prototype.rotate = function () {
+        if (!this.current || this.current.color === 4) {
+            return;
+        }
+
+        const blocks = this.current.blocks.map(position => [position[0], position[1]]);
+
+        /** @see https://qph.cf2.quoracdn.net/main-qimg-356e2b21c801381db2890dab49a9ea88 */
+        switch (true) {
+            case this.current.color === 1: // I
+                if (this.current.rotation === 0) {
+                    this.rotateBlock(blocks, [[0, 2, 2], [1, 1, 1], [3, -1, -1]]);
+                } else if (this.current.rotation === 1) {
+                    this.rotateBlock(blocks, [[3, -2, 2], [2, -1, 1], [0, 1, -1]]);
+                } else if (this.current.rotation === 2) {
+                    this.rotateBlock(blocks, [[3, 1, 1], [1, -1, -1], [0, -2, -2]]);
+                } else if (this.current.rotation === 3) {
+                    this.rotateBlock(blocks, [[0, -1, 1], [2, 1, -1], [3, 2, -2]]);
+                }
+                break;
+            case this.current.color === 2: // J
+                if (this.current.rotation === 0) {
+                    this.rotateBlock(blocks, [[0, 2, 0], [1, 1, -1], [3, -1, 1]]);
+                } else if (this.current.rotation === 1) {
+                    this.rotateBlock(blocks, [[0, 0, 2], [1, 1, 1], [3, -1, -1]]);
+                } else if (this.current.rotation === 2) {
+                    this.rotateBlock(blocks, [[0, -2, 0], [1, -1, 1], [3, 1, -1]]);
+                } else if (this.current.rotation === 3) {
+                    this.rotateBlock(blocks, [[0, 0, -2], [1, -1, -1], [3, 1, 1]]);
+                }
+                break;
+            case this.current.color === 3: // L
+                if (this.current.rotation === 0) {
+                    this.rotateBlock(blocks, [[0, 0, 2], [1, 1, -1], [3, -1, 1]]);
+                } else if (this.current.rotation === 1) {
+                    this.rotateBlock(blocks, [[0, -2, 0], [1, 1, 1], [3, -1, -1]]);
+                } else if (this.current.rotation === 2) {
+                    this.rotateBlock(blocks, [[0, 0, -2], [1, -1, 1], [3, 1, -1]]);
+                } else if (this.current.rotation === 3) {
+                    this.rotateBlock(blocks, [[0, 2, 0], [1, -1, -1], [3, 1, 1]]);
+                }
+                break;
+            case this.current.color === 5: // S
+                if (this.current.rotation === 0) {
+                    this.rotateBlock(blocks, [[1, -1, 1], [2, 0, -2], [3, -1, -1]]);
+                } else if (this.current.rotation === 1) {
+                    this.rotateBlock(blocks, [[1, -1, -1], [2, 2, 0], [3, 1, -1]]);
+                } else if (this.current.rotation === 2) {
+                    this.rotateBlock(blocks, [[1, 1, -1], [2, 0, 2], [3, 1, 1]]);
+                } else if (this.current.rotation === 3) {
+                    this.rotateBlock(blocks, [[1, 1, 1], [2, -2, 0], [3, -1, 1]]);
+                }
+                break;
+            case this.current.color === 6: // T
+                if (this.current.rotation === 0) {
+                    this.rotateBlock(blocks, [[0, 1, 1], [1, 1, -1], [3, -1, 1]]);
+                } else if (this.current.rotation === 1) {
+                    this.rotateBlock(blocks, [[0, -1, 1], [1, 1, 1], [3, -1, -1]]);
+                } else if (this.current.rotation === 2) {
+                    this.rotateBlock(blocks, [[0, -1, -1], [1, -1, 1], [3, 1, -1]]);
+                } else if (this.current.rotation === 3) {
+                    this.rotateBlock(blocks, [[0, 1, -1], [1, -1, -1], [3, 1, 1]]);
+                }
+                break;
+            case this.current.color === 7: // Z
+                if (this.current.rotation === 0) {
+                    this.rotateBlock(blocks, [[0, 2, 0], [1, 1, 1], [3, -1, 1]]);
+                } else if (this.current.rotation === 1) {
+                    this.rotateBlock(blocks, [[0, 0, 2], [1, -1, 1], [3, -1, -1]]);
+                } else if (this.current.rotation === 2) {
+                    this.rotateBlock(blocks, [[0, -2, 0], [1, -1, -1], [3, 1, -1]]);
+                } else if (this.current.rotation === 3) {
+                    this.rotateBlock(blocks, [[0, 0, -2], [1, 1, -1], [3, 1, 1]]);
+                }
+                break;
+        }
+
+        if (this.getBlockFit(blocks)) {
+            this.current.blocks.forEach(block => this.setBlock(block[0], block[1], 0));
+            blocks.forEach(block => this.setBlock(block[0], block[1], this.current.color));
+            this.current.blocks = blocks;
+
+            if (++this.current.rotation >= 4) {
+                this.current.rotation = 0;
+            }
+        }
+
+        this.redraw();
+    };
+
+    Tetris.prototype.moveUp = function () {
+        this.move(0, -1);
+    };
+
+    Tetris.prototype.moveLeft = function () {
+        this.move(-1, 0);
+    };
+
+    Tetris.prototype.moveRight = function () {
+        this.move(1, 0);
+    };
+
+    Tetris.prototype.moveDown = function () {
+        this.move(0, 1);
+    };
+
+    Tetris.prototype.redraw = function () {
+        for (let y = 0; y < this.options.rows; y++) {
+            for (let x = 0; x < this.options.cols; x++) {
+                this.elements[y][x].dataset.number = this.blocks[y][x];
+            }
+        }
+    };
+
+    Tetris.prototype.burn = function () {
+        let burnable = false;
+
+        for (let y = 0; y < this.options.rows; y++) {
+            burnable = true;
+
+            for (let x = 0; x < this.options.cols; x++) {
+                if (!this.getBlock(x, y)) {
+                    burnable = false;
+                    break;
+                }
+            }
+
+            if (burnable) {
+                for (let x = 0; x < this.options.cols; x++) {
+                    this.setBlock(x, y, 0);
+                }
+
+                this.burnStart = y;
+                this.burnCount++;
+            }
+        }
+
+        this.redraw();
+
+        return burnable;
+    };
+
+    Tetris.prototype.fall = function () {
+        if (this.burnCount) {
+            while (this.burnCount--) {
+                for (let y = this.burnStart; y > 1; y--) {
+                    for (let x = 0; x < this.options.cols; x++) {
+                        const block = this.getBlock(x, y - 1);
+
+                        this.setBlock(x, y, block);
+                    }
+                }
+            }
+
+            this.burnCount = 0;
+            this.redraw();
+            this.setInterval(this.options.speed / 1.2);
+
+            return true;
+        }
+
+        return false;
+    };
+
+    new Tetris({
+        el: document.getElementById('game'),
+    });
+</script>
+</body>
+</html>
